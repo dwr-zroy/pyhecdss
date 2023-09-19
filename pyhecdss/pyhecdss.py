@@ -10,10 +10,47 @@ import logging
 from datetime import datetime, timedelta
 from calendar import monthrange
 from dateutil.parser import parse
+import sys
+from contextlib import contextmanager
 # some static functions
 
 DATE_FMT_STR = '%d%b%Y'
 _USE_CONDENSED = False
+
+
+@contextmanager
+def null_io():
+    """Create a TextIOWrapper object pointing to os.devnull"""
+    try: 
+        with open(os.devnull, 'w') as null:
+            yield null
+    finally:
+        pass
+
+
+@contextmanager
+def silent_std_out():
+    """Small context manager to ignore stdout, even from FORTRAN subroutines. 
+    
+    Does not re-map stderr or stdin. Re-maps the system level stdout found 
+    using `sys.__stdout__`. The following will produce no outputs to appear on
+    the screen:
+
+    >>> with silent_std_out():
+    ...    print("Hello World")
+    ...    call_noisy_subroutine()
+    ...
+    """
+    # Clear pending, we want to see these
+    sys.__stdout__.flush()
+    with null_io() as null:
+        try: 
+            os.dup2(null.fileno(), sys.__stdout__.fileno())
+            yield None
+        finally:
+            # Clear pending, we do not want to see these
+            null.flush()
+            os.dup2(sys.__stdout__t.fileno(), null.fileno())
 
 
 def set_message_level(level):
@@ -21,7 +58,8 @@ def set_message_level(level):
     set the verbosity level of the HEC-DSS library
     level ranges from "bort" only (level 0) to "internal" (level >10)
     """
-    pyheclib.hec_zset('MLEVEL', '', level)
+    with silent_std_out():
+        pyheclib.hec_zset('MLEVEL', '', level)
 
 
 def set_program_name(program_name):
